@@ -5,9 +5,9 @@ model:
   # model class
   name: UNet3D
   # number of input channels to the model
-  in_channels: 1
+  in_channels: 4
   # number of output channels
-  out_channels: 1
+  out_channels: 4
   # determines the order of operators in a single layer (crg - Conv3d+ReLU+GroupNorm)
   layer_order: crg
   # feature maps scale factor
@@ -19,7 +19,7 @@ model:
 # trainer configuration
 trainer:
   # path to the checkpoint directory
-  checkpoint_dir: 3dunet
+  checkpoint_dir: /home/server/github/pytorch-3dunet/checkpoints/
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: null
   # how many iterations between validations
@@ -27,7 +27,7 @@ trainer:
   # how many iterations between tensorboard logging
   log_after_iters: 20
   # max number of epochs
-  epochs: 50
+  epochs: 100
   # max number of iterations
   iters: 100000
   # model with higher eval score is considered better
@@ -35,7 +35,7 @@ trainer:
 # optimizer configuration
 optimizer:
   # initial learning rate
-  learning_rate: 0.0002
+  learning_rate: 0.0001
   # weight decay
   weight_decay: 0.0001
 # loss function configuration
@@ -75,6 +75,8 @@ loaders:
   # paths to the validation datasets
   val_path:
     - 'resources/random_label3D.h5'
+  dataset_path:
+    - '/home/server/BraTS18_preprocessing_2'
   # how many subprocesses to use for data loading
   num_workers: 8
   # data transformations/augmentations

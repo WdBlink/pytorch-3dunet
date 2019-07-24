@@ -4,7 +4,8 @@ import torch
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from datasets.hdf5 import get_train_loaders
+import BraTS
+from datasets.hdf5 import get_train_loaders, get_brats_train_loaders
 from unet3d.config import load_config
 from unet3d.losses import get_loss_criterion
 from unet3d.metrics import get_evaluation_metric
@@ -102,7 +103,7 @@ def main():
     eval_criterion = get_evaluation_metric(config)
 
     # Create data loaders
-    loaders = get_train_loaders(config)
+    loaders = get_brats_train_loaders(config)
 
     # Create the optimizer
     optimizer = _create_optimizer(config, model)

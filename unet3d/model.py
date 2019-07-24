@@ -3,7 +3,7 @@ import importlib
 import torch
 import torch.nn as nn
 
-from unet3d.buildingblocks import Encoder, Decoder, FinalConv, DoubleConv, ExtResNetBlock, SingleConv
+from unet3d.buildingblocks import Encoder, Decoder, FinalConv, DoubleConv, ExtResNetBlock, SingleConv, GreenBlock
 from unet3d.utils import create_feature_maps
 
 
@@ -480,3 +480,16 @@ class EndToEndDTUNet3D(nn.Module):
     def forward(self, x):
         x = self.tags_net(x)
         return self.dt_net(x)
+
+
+class TestTheNet(nn.Module):
+    def __init__(self, in_channels, out_channels, final_sigmoid, f_maps=64, layer_order='crg', num_groups=8,
+                 **kwargs):
+        super(TestTheNet, self).__init__()
+
+        self.greenblock = GreenBlock(in_channels, out_channels)
+
+    def forward(self, x):
+        x = self.greenblock(x)
+        return x
+

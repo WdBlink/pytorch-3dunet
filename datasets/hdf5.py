@@ -4,10 +4,14 @@ import importlib
 import h5py
 import numpy as np
 import torch
+import torchvision
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 
 import augment.transforms as transforms
+import BraTS
 from unet3d.utils import get_logger
+from preprocess.partitions import load_tfrecord_datasets, get_all_partition_ids
+from unet3d.losses import expand_as_one_hot
 
 
 class SliceBuilder:
@@ -105,6 +109,53 @@ class FilterSliceBuilder(SliceBuilder):
         raw_slices, label_slices = zip(*filtered_slices)
         self._raw_slices = list(raw_slices)
         self._label_slices = list(label_slices)
+
+
+class BraTSDataset(Dataset):
+    """
+    Implementation of torch.utils.data.Dataset backed by the BRATS files, which iterates over the raw and label
+    """
+    def __init__(self, loader, patient_ids):
+        self.loader = loader
+        self.train_datasets = self.build_dataset_list(patient_ids)
+        self.count = len(self.train_datasets)
+        # self.transform = transforms.Compose(
+        #     [transforms.ToTensor(),
+        #      transforms.Normalize((0.5, 0.5, 0.5, 0.5), (0.5, 0.5, 0.5, 0.5))])
+        self.transforms = transforms.Compose(
+            [transforms.ToTensor(expand_dims=True),
+             transforms.Normalize(std=0.5, mean=0.5)])
+
+    def __getitem__(self, index):
+        if index >= len(self):
+            raise StopIteration
+        self.patient = self.loader.train.patient(self.train_datasets[index])
+        images = self.make_crop(self.patient.mri)
+        images = self.transforms(images)
+        labels = self.make_crop(self.patient.seg)
+        labels = self.make_one_hot(labels)
+        return images, labels
+
+    def __len__(self):
+        return self.count
+
+    @staticmethod
+    def build_dataset_list(patient_ids):
+        train_datasets = []
+        for patient in patient_ids:
+            train_datasets.append(patient)
+        return train_datasets
+
+    @staticmethod
+    def make_one_hot(input):
+        seg = np.eye(5)[input].transpose(3, 0, 1, 2)
+        seg = seg[[0, 1, 2, 4], :, :, :]
+        return seg
+
+    @staticmethod
+    def make_crop(input):
+        image = input[..., 40:200, 24:216, 13:141]
+        return image
 
 
 class HDF5Dataset(Dataset):
@@ -330,6 +381,45 @@ def get_train_loaders(config):
     return {
         'train': DataLoader(ConcatDataset(train_datasets), batch_size=1, shuffle=True, num_workers=num_workers),
         'val': DataLoader(ConcatDataset(val_datasets), batch_size=1, shuffle=True, num_workers=num_workers)
+    }
+
+
+def get_brats_train_loaders(config):
+    """
+    Returns dictionary containing the training and validation loaders
+    (torch.utils.data.DataLoader) backed by the datasets.hdf5.HDF5Dataset.
+
+    :param config: a top level configuration object containing the 'loaders' key
+    :return: dict {
+        'train': <train_loader>
+        'val': <val_loader>
+    }
+    """
+    assert 'loaders' in config, 'Could not find data loaders configuration'
+    loaders_config = config['loaders']
+
+    logger = get_logger('BraTS_Dataset')
+    logger.info('Creating training and validation set loaders...')
+
+    # get train and validation files
+    data_paths = loaders_config['dataset_path']
+    assert isinstance(data_paths, list)
+
+    brats = BraTS.DataSet(brats_root=data_paths[0], year=2018)
+    train_ids, test_ids, validation_ids = get_all_partition_ids()
+    logger.info(f'Loading training set from: {data_paths}...')
+    train_datasets = BraTSDataset(brats, train_ids)
+
+    logger.info(f'Loading validation set from: {data_paths}...')
+    val_datasets = BraTSDataset(brats, test_ids)
+
+
+    num_workers = loaders_config.get('num_workers', 1)
+    logger.info(f'Number of workers for train/val datasets: {num_workers}')
+    # when training with volumetric data use batch_size of 1 due to GPU memory constraints
+    return {
+        'train': DataLoader(train_datasets, batch_size=1, shuffle=True, num_workers=num_workers),
+        'val': DataLoader(val_datasets, batch_size=1, shuffle=True, num_workers=num_workers)
     }
 
 

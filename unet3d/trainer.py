@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import torch
+import datetime
 from tensorboardX import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -75,7 +76,7 @@ class UNet3DTrainer:
             else:
                 self.best_eval_score = float('+inf')
 
-        self.writer = SummaryWriter(log_dir=os.path.join(checkpoint_dir, 'logs'))
+        self.writer = SummaryWriter(logdir=os.path.join(checkpoint_dir, 'logs'))
 
         self.num_iterations = num_iterations
         self.num_epoch = num_epoch
@@ -158,6 +159,11 @@ class UNet3DTrainer:
                 f'Training iteration {self.num_iterations}. Batch {i}. Epoch [{self.num_epoch}/{self.max_num_epochs - 1}]')
 
             input, target, weight = self._split_training_batch(t)
+            maxinput = torch.max(input)
+            mininput = torch.min(input)
+            maxtarget = torch.max(target)
+            targetsize = target.size()
+            onehottarget = target[0,:,15,20,30]
 
             output, loss = self._forward_pass(input, target, weight)
 
@@ -247,7 +253,7 @@ class UNet3DTrainer:
             if isinstance(input, tuple) or isinstance(input, list):
                 return tuple([_move_to_device(x) for x in input])
             else:
-                return input.to(self.device)
+                return input.to(self.device, dtype=torch.float)
 
         t = _move_to_device(t)
         weight = None

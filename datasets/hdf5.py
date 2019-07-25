@@ -119,19 +119,21 @@ class BraTSDataset(Dataset):
         self.loader = loader
         self.train_datasets = self.build_dataset_list(patient_ids)
         self.count = len(self.train_datasets)
-        # self.transform = transforms.Compose(
-        #     [transforms.ToTensor(),
-        #      transforms.Normalize((0.5, 0.5, 0.5, 0.5), (0.5, 0.5, 0.5, 0.5))])
-        self.transforms = transforms.Compose(
-            [transforms.ToTensor(expand_dims=True),
-             transforms.Normalize(std=0.5, mean=0.5)])
 
     def __getitem__(self, index):
         if index >= len(self):
             raise StopIteration
         self.patient = self.loader.train.patient(self.train_datasets[index])
         images = self.make_crop(self.patient.mri)
+
+        # transforms the mri to range of -1~1
+        image_max = np.max(images)
+        self.transforms = transforms.Compose(
+            [transforms.ToTensor(expand_dims=True),
+             transforms.RangeNormalize(max_value=image_max),
+             transforms.Normalize(std=0.5, mean=0.5)])
         images = self.transforms(images)
+
         labels = self.make_crop(self.patient.seg)
         labels = self.make_one_hot(labels)
         return images, labels
@@ -411,8 +413,7 @@ def get_brats_train_loaders(config):
     train_datasets = BraTSDataset(brats, train_ids)
 
     logger.info(f'Loading validation set from: {data_paths}...')
-    val_datasets = BraTSDataset(brats, test_ids)
-
+    val_datasets = BraTSDataset(brats, validation_ids)
 
     num_workers = loaders_config.get('num_workers', 1)
     logger.info(f'Number of workers for train/val datasets: {num_workers}')

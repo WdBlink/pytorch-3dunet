@@ -28,7 +28,7 @@ def compute_per_channel_dice(input, target, epsilon=1e-5, ignore_index=None, wei
     if weight is not None:
         intersect = weight * intersect
 
-    denominator = (input + target).sum(-1)
+    denominator = (seg_pred + seg_true).sum(-1)
     return 2. * intersect / denominator.clamp(min=epsilon)
 
 

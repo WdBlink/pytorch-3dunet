@@ -39,7 +39,7 @@ class UNet3DTrainer:
     """
 
     def __init__(self, model, optimizer, lr_scheduler, loss_criterion,
-                 eval_criterion, device, loaders, checkpoint_dir,
+                 eval_criterion, device, loaders, checkpoint_dir, model_name,
                  max_num_epochs=100, max_num_iterations=1e5,
                  validate_after_iters=100, log_after_iters=100,
                  validate_iters=None, num_iterations=1, num_epoch=0,
@@ -59,6 +59,7 @@ class UNet3DTrainer:
         self.device = device
         self.loaders = loaders
         self.checkpoint_dir = checkpoint_dir
+        self.model_name = model_name
         self.max_num_epochs = max_num_epochs
         self.max_num_iterations = max_num_iterations
         self.validate_after_iters = validate_after_iters
@@ -76,10 +77,14 @@ class UNet3DTrainer:
             else:
                 self.best_eval_score = float('+inf')
 
-        self.writer = SummaryWriter(logdir=os.path.join(checkpoint_dir, 'logs'))
+        self.writer = SummaryWriter(logdir=os.path.join(checkpoint_dir, self._get_job_name()))
 
         self.num_iterations = num_iterations
         self.num_epoch = num_epoch
+
+    def _get_job_name(self):
+        now = '{:%Y-%m-%d.%H:%M}'.format(datetime.datetime.now())
+        return "%s_model_%s" % (now, self.model_name)
 
     @classmethod
     def from_checkpoint(cls, checkpoint_path, model, optimizer, lr_scheduler, loss_criterion, eval_criterion, loaders,
@@ -159,11 +164,11 @@ class UNet3DTrainer:
                 f'Training iteration {self.num_iterations}. Batch {i}. Epoch [{self.num_epoch}/{self.max_num_epochs - 1}]')
 
             input, target, weight = self._split_training_batch(t)
-            maxinput = torch.max(input)
-            mininput = torch.min(input)
-            maxtarget = torch.max(target)
-            targetsize = target.size()
-            onehottarget = target[0,:,15,20,30]
+            # maxinput = torch.max(input)
+            # mininput = torch.min(input)
+            # maxtarget = torch.max(target)
+            # targetsize = target.size()
+            # onehottarget = target[0,:,15,20,30]
 
             output, loss = self._forward_pass(input, target, weight)
 

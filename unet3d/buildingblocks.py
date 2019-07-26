@@ -7,6 +7,10 @@ def conv3d(in_channels, out_channels, kernel_size, bias, padding=1, stride=1):
     return nn.Conv3d(in_channels, out_channels, kernel_size, padding=padding, bias=bias, stride=stride)
 
 
+def fcn(in_dim, out_dim):
+    return nn.Linear(in_dim, out_dim)
+
+
 def create_conv(in_channels, out_channels, kernel_size, order, num_groups, padding=1):
     """
     Create a list of modules with together constitute a single conv layer with non-linearity
@@ -421,3 +425,71 @@ class UpBlock(nn.Module):
         # conv1 = self.convblock1(concat)
         # conv2 = self.convblock2(conv1)
         return upsample
+    
+    
+class VaeBlock(nn.Module):
+    """
+        A module that carry out vae regularization
+        Args:
+            in_channels (int): number of input channels
+            out_channels (int): number of output channels
+            kernel_size (int): size of the convolving kernel
+            order (string): determines the order of layers, e.g.
+                'cr' -> conv + ReLU
+                'crg' -> conv + ReLU + groupnorm
+            num_groups (int): number of groups for the GroupNorm
+        """
+    def __init__(self, input_channels, output_channels, order="cgr", num_groups=8):
+        super(VaeBlock, self).__init__()
+        self.conv_block = SingleConv(input_channels, 1, order=order, num_groups=num_groups)
+        self.fcn = nn.Linear(7680, 128)
+        self.fcn1 = nn.Linear(128, 64)
+        self.fcn2 = nn.Linear(128, 64)
+        self.fcn3 = nn.Linear(128, 7680)
+        self.conv1 = conv3d(1, 128, kernel_size=1, bias=True, padding=0)
+        # self.greenblock = GreenBlock(128, 128)
+        self.conv2 = conv3d(128, 64, kernel_size=1, bias=True, padding=0)
+        # self.greenblock1 = GreenBlock(64, 64)
+        self.conv3 = conv3d(64, 32, kernel_size=1, bias=True, padding=0)
+        # self.greenblock2 = GreenBlock(32, 32)
+        self.conv4 = conv3d(32, 4, kernel_size=1, bias=True, padding=0)
+
+    def forward(self, x):
+        x = self.conv_block(x)
+        x = torch.flatten(x)
+        x = self.fcn(x)
+        z_mean = self.fcn1(x)
+        z_var = self.fcn2(x)
+        x = self.sampling([z_mean, z_var])
+        x = torch.reshape(x, (-1, 128))
+
+        x = self.fcn3(x)
+        x = torch.reshape(x, (-1, 1, 20, 24, 16))
+        x = self.conv1(x)
+        x = F.upsample(x, size=[2*x.size(2), 2*x.size(3), 2*x.size(4)], mode='trilinear')
+        # x = self.greenblock(x)
+
+        x = self.conv2(x)
+        x = F.upsample(x, size=[2*x.size(2), 2*x.size(3), 2*x.size(4)], mode='trilinear')
+        # x = self.greenblock1(x)
+
+        x = self.conv3(x)
+        x = F.upsample(x, size=[2 * x.size(2), 2 * x.size(3), 2 * x.size(4)], mode='trilinear')
+        # x = self.greenblock2(x)
+
+        x = self.conv4(x)
+
+        return x, z_mean, z_var
+
+    def sampling(self, args):
+        """Reparameterization trick by sampling from an isotropic unit Gaussian.
+        # Arguments
+            args (tensor): mean and log of variance of Q(z|X)
+        # Returns
+            z (tensor): sampled latent vector
+        """
+        z_mean, z_var = args
+        batch = 2
+        dim = z_mean.size(0)
+        epsilon = torch.randn([batch, dim]).cuda(1)
+        return z_mean + torch.exp(0.5 * z_var) * epsilon

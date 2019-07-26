@@ -204,7 +204,10 @@ class UNet3DTrainer:
 
                 # log stats, params and images
                 self.logger.info(
-                    f'Training stats. Loss: {train_losses.avg}. Evaluation score WT:{train_eval_scores_multi.avg1}, TC:{train_eval_scores_multi.avg2}, ET:{train_eval_scores_multi.avg3}')
+                    f'Training stats. Loss: {train_losses.avg}. '
+                    f'Evaluation score WT:{train_eval_scores_multi.avg1}, '
+                    f'TC:{train_eval_scores_multi.avg2}, '
+                    f'ET:{train_eval_scores_multi.avg3}')
                 self._log_stats_multi('train', train_losses.avg, train_eval_scores_multi.avg1, train_eval_scores_multi.avg2, train_eval_scores_multi.avg3)
                 self._log_params()
                 self._log_images(input, target, output)
@@ -279,10 +282,14 @@ class UNet3DTrainer:
         output = self.model(input)
 
         # compute the loss
-        if weight is None:
-            loss = self.loss_criterion(output, target)
+        if self.model_name == "VaeUNet":
+            loss = self.loss_criterion(input, output[1], output[0], target, output[2], output[3])
+            output = output[0]
         else:
-            loss = self.loss_criterion(output, target, weight)
+            if weight is None:
+                loss = self.loss_criterion(output, target)
+            else:
+                loss = self.loss_criterion(output, target, weight)
 
         return output, loss
 

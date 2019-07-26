@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from unet3d.buildingblocks import conv3d, Encoder, Decoder, FinalConv, DoubleConv, \
-    ExtResNetBlock, SingleConv, GreenBlock, DownBlock, UpBlock
+    ExtResNetBlock, SingleConv, GreenBlock, DownBlock, UpBlock, VaeBlock
 from unet3d.utils import create_feature_maps
 
 
@@ -502,11 +502,11 @@ class VaeUNet(nn.Module):
         self.conv3d = conv3d(in_channels, 32, kernel_size=3, bias=True)
         self.dropout = nn.Dropout(p=0.2)
         self.convblock = SingleConv(32, 32)
-        self.greenblock = GreenBlock(in_channels, out_channels)
         self.downblock1 = DownBlock(32, 16)
         self.downblock2 = DownBlock(16, 32)
         self.downblock3 = DownBlock(32, 64)
-        self.greenblock = GreenBlock(64, 64)
+        self.greenblock1 = GreenBlock(64, 64)
+        self.greenblock2 = GreenBlock(64, 64)
         self.upblock1 = UpBlock(64, 32)
         self.convblock1 = SingleConv(96, 32, order=layer_order, num_groups=num_groups)
         self.convblock2 = SingleConv(32, 32, order=layer_order, num_groups=num_groups)
@@ -517,6 +517,8 @@ class VaeUNet(nn.Module):
         self.convblock5 = SingleConv(24, 4, order=layer_order, num_groups=num_groups)
         self.convblock6 = SingleConv(4, 4, order=layer_order, num_groups=num_groups)
         self.final_conv = conv3d(4, 4, kernel_size=1, bias=True, padding=0)
+
+        self.vae_block = VaeBlock(64, 4)
 
         if final_sigmoid:
             self.final_activation = nn.Sigmoid()
@@ -532,8 +534,8 @@ class VaeUNet(nn.Module):
         level2, l2_conv = self.downblock2(level1)
         level3, l3_conv = self.downblock3(level2)
 
-        conv1 = self.greenblock(level3)
-        conv2 = self.greenblock(conv1)
+        conv1 = self.greenblock1(level3)
+        conv2 = self.greenblock2(conv1)
 
         level3_up = self.upblock1(conv2)
         concat = torch.cat([level3_up, l3_conv], 1)
@@ -551,7 +553,8 @@ class VaeUNet(nn.Module):
         level1_up = self.convblock6(level1_up)
 
         output = self.final_conv(level1_up)
+        vae_out, z_mean, z_var = self.vae_block(conv2)
 
         if not self.training:
             output = self.final_activation(output)
-        return output
+        return output, vae_out, z_mean, z_var

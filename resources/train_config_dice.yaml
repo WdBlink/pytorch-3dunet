@@ -21,7 +21,7 @@ trainer:
   # path to the checkpoint directory
   checkpoint_dir: /home/server/github/pytorch-3dunet/checkpoints/vae_model
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
-  resume: /home/server/github/pytorch-3dunet/checkpoints/vae_model/last_checkpoint.pytorch
+  resume: null
   # how many iterations between validations
   validate_after_iters: 20
   # how many iterations between tensorboard logging
@@ -41,7 +41,7 @@ optimizer:
 # loss function configuration
 loss:
   # loss function to be used during training
-  name: DiceLoss
+  name: VaeLoss
   # A manual rescaling weight given to each class.
   loss_weight: null
   # a target value that is ignored and does not contribute to the input gradient

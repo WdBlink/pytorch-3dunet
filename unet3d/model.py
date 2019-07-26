@@ -3,7 +3,8 @@ import importlib
 import torch
 import torch.nn as nn
 
-from unet3d.buildingblocks import Encoder, Decoder, FinalConv, DoubleConv, ExtResNetBlock, SingleConv, GreenBlock
+from unet3d.buildingblocks import conv3d, Encoder, Decoder, FinalConv, DoubleConv, \
+    ExtResNetBlock, SingleConv, GreenBlock, DownBlock, UpBlock
 from unet3d.utils import create_feature_maps
 
 
@@ -493,3 +494,64 @@ class TestTheNet(nn.Module):
         x = self.greenblock(x)
         return x
 
+
+class VaeUNet(nn.Module):
+    def __init__(self, in_channels, out_channels, final_sigmoid, f_maps=64, layer_order='cgr', num_groups=8,
+                 **kwargs):
+        super(VaeUNet, self).__init__()
+        self.conv3d = conv3d(in_channels, 32, kernel_size=3, bias=True)
+        self.dropout = nn.Dropout(p=0.2)
+        self.convblock = SingleConv(32, 32)
+        self.greenblock = GreenBlock(in_channels, out_channels)
+        self.downblock1 = DownBlock(32, 16)
+        self.downblock2 = DownBlock(16, 32)
+        self.downblock3 = DownBlock(32, 64)
+        self.greenblock = GreenBlock(64, 64)
+        self.upblock1 = UpBlock(64, 32)
+        self.convblock1 = SingleConv(96, 32, order=layer_order, num_groups=num_groups)
+        self.convblock2 = SingleConv(32, 32, order=layer_order, num_groups=num_groups)
+        self.upblock2 = UpBlock(32, 16)
+        self.convblock3 = SingleConv(48, 16, order=layer_order, num_groups=num_groups)
+        self.convblock4 = SingleConv(16, 16, order=layer_order, num_groups=num_groups)
+        self.upblock3 = UpBlock(16, 8)
+        self.convblock5 = SingleConv(24, 4, order=layer_order, num_groups=num_groups)
+        self.convblock6 = SingleConv(4, 4, order=layer_order, num_groups=num_groups)
+        self.final_conv = conv3d(4, 4, kernel_size=1, bias=True, padding=0)
+
+        if final_sigmoid:
+            self.final_activation = nn.Sigmoid()
+        else:
+            self.final_activation = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        x = self.conv3d(x)
+        x = self.dropout(x)
+        x = self.convblock(x)
+
+        level1, l1_conv = self.downblock1(x)
+        level2, l2_conv = self.downblock2(level1)
+        level3, l3_conv = self.downblock3(level2)
+
+        conv1 = self.greenblock(level3)
+        conv2 = self.greenblock(conv1)
+
+        level3_up = self.upblock1(conv2)
+        concat = torch.cat([level3_up, l3_conv], 1)
+        level3_up = self.convblock1(concat)
+        level3_up = self.convblock2(level3_up)
+
+        level2_up = self.upblock2(level3_up)
+        concat = torch.cat([level2_up, l2_conv], 1)
+        level2_up = self.convblock3(concat)
+        level2_up = self.convblock4(level2_up)
+
+        level1_up = self.upblock3(level2_up)
+        concat = torch.cat([level1_up, l1_conv], 1)
+        level1_up = self.convblock5(concat)
+        level1_up = self.convblock6(level1_up)
+
+        output = self.final_conv(level1_up)
+
+        if not self.training:
+            output = self.final_activation(output)
+        return output

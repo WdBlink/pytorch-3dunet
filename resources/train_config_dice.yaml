@@ -3,7 +3,7 @@ manual_seed: 0
 # model configuration
 model:
   # model class
-  name: UNet3D
+  name: VaeUNet
   # number of input channels to the model
   in_channels: 4
   # number of output channels
@@ -19,9 +19,9 @@ model:
 # trainer configuration
 trainer:
   # path to the checkpoint directory
-  checkpoint_dir: /home/server/github/pytorch-3dunet/checkpoints/
+  checkpoint_dir: /home/server/github/pytorch-3dunet/checkpoints/vae_model
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
-  resume: null
+  resume: /home/server/github/pytorch-3dunet/checkpoints/vae_model/last_checkpoint.pytorch
   # how many iterations between validations
   validate_after_iters: 20
   # how many iterations between tensorboard logging
@@ -48,7 +48,7 @@ loss:
   ignore_index: null
 # evaluation metric configuration
 eval_metric:
-  name: MeanIoU
+  name: DiceCoefficient
   # a target label that is ignored during metric evaluation
   ignore_index: null
 lr_scheduler:
@@ -76,7 +76,7 @@ loaders:
   val_path:
     - 'resources/random_label3D.h5'
   dataset_path:
-    - '/home/server/BraTS18_preprocessing_2'
+    - '/home/server/data'
   # how many subprocesses to use for data loading
   num_workers: 8
   # data transformations/augmentations

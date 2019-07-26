@@ -32,8 +32,28 @@ class DiceCoefficient:
         :param target: 4D or 5D ground truth torch tensor. 4D (NxDxHxW) tensor will be expanded to 5D as one-hot
         :return: Soft Dice Coefficient averaged over all channels/classes
         """
-        # Average across channels in order to get the final score
-        return torch.mean(compute_per_channel_dice(input, target, epsilon=self.epsilon, ignore_index=self.ignore_index))
+        seg_pred = torch.reshape(input[0], [4, -1])
+        seg_true = torch.reshape(target[0], [4, -1])
+
+        seg_pred_wt = seg_pred[1:4, :]  # Whole Tumor 1,2,4
+        seg_true_wt = seg_true[1:4, :]
+        numerator_wt = 2. * (seg_pred_wt * seg_true_wt).sum(-1)
+        denominator_wt = (seg_pred_wt + seg_true_wt).sum(-1)
+        dice_wt = torch.mean(2. * numerator_wt / denominator_wt.clamp(min=self.epsilon))
+
+        seg_pred_tc = seg_pred[[1, 3], :]  # Tumor Core 1,4
+        seg_true_tc = seg_true[[1, 3], :]
+        numerator_tc = 2. * (seg_pred_tc * seg_true_tc).sum(-1)
+        denominator_tc = (seg_pred_tc + seg_true_tc).sum(-1)
+        dice_tc = torch.mean(2. * numerator_tc / denominator_tc.clamp(min=self.epsilon))
+
+        seg_pred_et = seg_pred[3, :]  # Enhancing Tumor 4
+        seg_true_et = seg_true[3, :]
+        numerator_et = 2. * (seg_pred_et * seg_true_et).sum(-1)
+        denominator_et = (seg_pred_et + seg_true_et).sum(-1)
+        dice_et = torch.mean(2. * numerator_et / denominator_et.clamp(min=self.epsilon))
+
+        return dice_wt, dice_tc, dice_et
 
 
 class MeanIoU:

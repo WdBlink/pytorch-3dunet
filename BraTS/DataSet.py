@@ -179,7 +179,9 @@ class DataSet(object):
         self._hgg_dir = os.path.join(self._train_dir, "HGG")
         self._lgg_dir = os.path.join(self._train_dir, "LGG")
         self._2019_hgg_dir = os.path.join("/home/server/data/BraTS19/MICCAI_BraTS_2019_Data_Training/HGG")
+        # self._2019_hgg_dir = None
         self._2019_lgg_dir = os.path.join("/home/server/data/BraTS19/MICCAI_BraTS_2019_Data_Training/LGG")
+        # self._2019_lgg_dir = None
 
         self._train_survival_csv_cached = None
         self._validation_survival_csv_cached = None
@@ -327,8 +329,8 @@ class DataSet(object):
         # if self._train_dir_map_cache is None:
         self._train_dir_map_cache = dict(self._hgg_dir_map)
         self._train_dir_map_cache.update(self._lgg_dir_map)
-        self._train_dir_map_cache.update(self._2019_lgg_dir_map)
-        self._train_dir_map_cache.update(self._2019_hgg_dir_map)
+        # self._train_dir_map_cache.update(self._2019_lgg_dir_map)
+        # self._train_dir_map_cache.update(self._2019_hgg_dir_map)
         return self._train_dir_map_cache
 
     @property

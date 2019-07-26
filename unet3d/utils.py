@@ -95,6 +95,33 @@ class RunningAverage:
         self.avg = self.sum / self.count
 
 
+class RunningAverageMulti:
+
+    def __init__(self):
+        self.count1 = 0
+        self.count2 = 0
+        self.count3 = 0
+        self.sum1 = 0
+        self.sum2 = 0
+        self.sum3 = 0
+        self.avg1 = 0
+        self.avg2 = 0
+        self.avg3 = 0
+
+    def update(self, value, n=1):
+        self.count1 += n
+        self.count2 += n
+        self.count3 += n
+
+        self.sum1 += value[0] * n
+        self.sum2 += value[1] * n
+        self.sum3 += value[2] * n
+
+        self.avg1 = self.sum1 / self.count1
+        self.avg2 = self.sum2 / self.count2
+        self.avg3 = self.sum3 / self.count3
+
+
 def find_maximum_patch_size(model, device):
     """Tries to find the biggest patch size that can be send to GPU for inference
     without throwing CUDA out of memory"""

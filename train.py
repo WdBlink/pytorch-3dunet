@@ -48,6 +48,7 @@ def _create_trainer(config, model, optimizer, lr_scheduler, loss_criterion, eval
                              log_after_iters=trainer_config['log_after_iters'],
                              eval_score_higher_is_better=trainer_config['eval_score_higher_is_better'],
                              model_name=config['model']['name'],
+                             validate_iters=10,
                              logger=logger)
 
 

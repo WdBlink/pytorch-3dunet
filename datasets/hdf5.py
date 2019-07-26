@@ -123,7 +123,7 @@ class BraTSDataset(Dataset):
     def __getitem__(self, index):
         if index >= len(self):
             raise StopIteration
-        self.patient = self.loader.train.patient(self.train_datasets[index])
+        self.patient = self.loader.patient(self.train_datasets[index])
         images = self.make_crop(self.patient.mri)
 
         # transforms the mri to range of -1~1
@@ -134,6 +134,7 @@ class BraTSDataset(Dataset):
              transforms.Normalize(std=0.5, mean=0.5)])
         images = self.transforms(images)
 
+        # print(self.train_datasets[index])
         labels = self.make_crop(self.patient.seg)
         labels = self.make_one_hot(labels)
         return images, labels
@@ -407,12 +408,22 @@ def get_brats_train_loaders(config):
     data_paths = loaders_config['dataset_path']
     assert isinstance(data_paths, list)
 
-    brats = BraTS.DataSet(brats_root=data_paths[0], year=2018)
+    brats = BraTS.DataSet(brats_root=data_paths[0], year=2019).train
     train_ids, test_ids, validation_ids = get_all_partition_ids()
+    # loss_file_num = 0
+    # for i in train_ids:
+    #     name = i + ".tfrecord.gzip"
+    #     answer = search('/home/server/data/TFRecord/val', name)
+    #     if answer == -1:
+    #         print("查无此文件", name)
+    #         loss_file_num += 1
+    # print(f'loss file num is {loss_file_num}')
+
     logger.info(f'Loading training set from: {data_paths}...')
     train_datasets = BraTSDataset(brats, train_ids)
 
     logger.info(f'Loading validation set from: {data_paths}...')
+    brats = BraTS.DataSet(brats_root=data_paths[0], year=2019).train
     val_datasets = BraTSDataset(brats, validation_ids)
 
     num_workers = loaders_config.get('num_workers', 1)
@@ -422,6 +433,18 @@ def get_brats_train_loaders(config):
         'train': DataLoader(train_datasets, batch_size=1, shuffle=True, num_workers=num_workers),
         'val': DataLoader(val_datasets, batch_size=1, shuffle=True, num_workers=num_workers)
     }
+#
+# import os
+# import sys
+# def search(path,name):
+#
+#     for root, dirs, files in os.walk(path):  # path 为根目录
+#         if name in dirs or name in files:
+#             flag = 1      #判断是否找到文件
+#             root = str(root)
+#             dirs = str(dirs)
+#             return os.path.join(root, dirs)
+#     return -1
 
 
 def get_test_loaders(config):

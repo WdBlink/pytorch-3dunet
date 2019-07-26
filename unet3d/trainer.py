@@ -107,6 +107,7 @@ class UNet3DTrainer:
                    validate_after_iters=state['validate_after_iters'],
                    log_after_iters=state['log_after_iters'],
                    validate_iters=state['validate_iters'],
+                   model_name="UNet3d",
                    logger=logger)
 
     @classmethod
@@ -154,7 +155,7 @@ class UNet3DTrainer:
             True if the training should be terminated immediately, False otherwise
         """
         train_losses = utils.RunningAverage()
-        train_eval_scores = utils.RunningAverage()
+        train_eval_scores_multi = utils.RunningAverageMulti()
 
         # sets the model in training mode
         self.model.train()
@@ -164,11 +165,6 @@ class UNet3DTrainer:
                 f'Training iteration {self.num_iterations}. Batch {i}. Epoch [{self.num_epoch}/{self.max_num_epochs - 1}]')
 
             input, target, weight = self._split_training_batch(t)
-            # maxinput = torch.max(input)
-            # mininput = torch.min(input)
-            # maxtarget = torch.max(target)
-            # targetsize = target.size()
-            # onehottarget = target[0,:,15,20,30]
 
             output, loss = self._forward_pass(input, target, weight)
 
@@ -203,12 +199,13 @@ class UNet3DTrainer:
 
                 # compute eval criterion
                 eval_score = self.eval_criterion(output, target)
-                train_eval_scores.update(eval_score.item(), self._batch_size(input))
+                # train_eval_scores.update(eval_score.item(), self._batch_size(input))
+                train_eval_scores_multi.update(eval_score, self._batch_size(input))
 
                 # log stats, params and images
                 self.logger.info(
-                    f'Training stats. Loss: {train_losses.avg}. Evaluation score: {train_eval_scores.avg}')
-                self._log_stats('train', train_losses.avg, train_eval_scores.avg)
+                    f'Training stats. Loss: {train_losses.avg}. Evaluation score WT:{train_eval_scores_multi.avg1}, TC:{train_eval_scores_multi.avg2}, ET:{train_eval_scores_multi.avg3}')
+                self._log_stats_multi('train', train_losses.avg, train_eval_scores_multi.avg1, train_eval_scores_multi.avg2, train_eval_scores_multi.avg3)
                 self._log_params()
                 self._log_images(input, target, output)
 
@@ -225,7 +222,8 @@ class UNet3DTrainer:
         self.logger.info('Validating...')
 
         val_losses = utils.RunningAverage()
-        val_scores = utils.RunningAverage()
+        # val_scores = utils.RunningAverage()
+        val_scores_multi = utils.RunningAverageMulti()
 
         try:
             # set the model in evaluation mode; final_activation doesn't need to be called explicitly
@@ -240,15 +238,23 @@ class UNet3DTrainer:
                     val_losses.update(loss.item(), self._batch_size(input))
 
                     eval_score = self.eval_criterion(output, target)
-                    val_scores.update(eval_score.item(), self._batch_size(input))
+
+                    # val_scores.update(eval_score.item(), self._batch_size(input))
+                    val_scores_multi.update(eval_score, self._batch_size(input))
 
                     if self.validate_iters is not None and self.validate_iters <= i:
                         # stop validation
                         break
 
-                self._log_stats('val', val_losses.avg, val_scores.avg)
-                self.logger.info(f'Validation finished. Loss: {val_losses.avg}. Evaluation score: {val_scores.avg}')
-                return val_scores.avg
+                # self._log_stats('val', val_losses.avg, val_scores.avg)
+                self._log_stats_multi('val', val_losses.avg, val_scores_multi.avg1, val_scores_multi.avg2, val_scores_multi.avg3)
+                # self.logger.info(f'Validation finished. Loss: {val_losses.avg}. Evaluation score: {val_scores.avg}')
+                self.logger.info(f'Validation finished. Loss: {val_losses.avg}. '
+                                 f'Evaluation score WT:{val_scores_multi.avg1}, '
+                                 f'TC:{val_scores_multi.avg2}, '
+                                 f'ET:{val_scores_multi.avg3}')
+
+                return val_scores_multi.avg1
         finally:
             # set back in training mode
             self.model.train()
@@ -321,6 +327,18 @@ class UNet3DTrainer:
 
         for tag, value in tag_value.items():
             self.writer.add_scalar(tag, value, self.num_iterations)
+
+    def _log_stats_multi(self, phase, loss_avg, eval_score_avg1, eval_score_avg2, eval_score_avg3):
+        tag_value = {
+            f'{phase}_loss_avg': loss_avg,
+            f'{phase}_eval_score_avg1': eval_score_avg1,
+            f'{phase}_eval_score_avg2': eval_score_avg2,
+            f'{phase}_eval_score_avg3': eval_score_avg3
+        }
+
+        for tag, value in tag_value.items():
+            self.writer.add_scalar(tag, value, self.num_iterations)
+
 
     def _log_params(self):
         self.logger.info('Logging model parameters and gradients')

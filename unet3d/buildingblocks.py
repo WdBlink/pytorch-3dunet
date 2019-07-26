@@ -3,8 +3,8 @@ from torch import nn as nn
 from torch.nn import functional as F
 
 
-def conv3d(in_channels, out_channels, kernel_size, bias, padding=1):
-    return nn.Conv3d(in_channels, out_channels, kernel_size, padding=padding, bias=bias)
+def conv3d(in_channels, out_channels, kernel_size, bias, padding=1, stride=1):
+    return nn.Conv3d(in_channels, out_channels, kernel_size, padding=padding, bias=bias, stride=stride)
 
 
 def create_conv(in_channels, out_channels, kernel_size, order, num_groups, padding=1):
@@ -366,6 +366,58 @@ class GreenBlock(nn.Module):
         return out
 
 
+class DownBlock(nn.Module):
+    """
+    A module down sample the feature map
+    Args:
+        in_channels (int): number of input channels
+        out_channels (int): number of output channels
+        kernel_size (int): size of the convolving kernel
+        order (string): determines the order of layers, e.g.
+            'cr' -> conv + ReLU
+            'crg' -> conv + ReLU + groupnorm
+        num_groups (int): number of groups for the GroupNorm
+    """
+    def __init__(self, input_channels, output_channels, order="cgr", num_groups=8):
+        super(DownBlock, self).__init__()
+        self.convblock1 = SingleConv(input_channels, output_channels, order=order, num_groups=num_groups)
+        self.convblock2 = SingleConv(output_channels, output_channels, order=order, num_groups=num_groups)
+        self.downsample = conv3d(output_channels, output_channels, kernel_size=3, bias=True, stride=2)
+
+    def forward(self, x):
+        conv1 = self.convblock1(x)
+        conv2 = self.convblock2(conv1)
+        down = self.downsample(conv2)
+        return down, conv2
 
 
+class UpBlock(nn.Module):
+    """
+        A module down sample the feature map
+        Args:
+            in_channels (int): number of input channels
+            out_channels (int): number of output channels
+            kernel_size (int): size of the convolving kernel
+            order (string): determines the order of layers, e.g.
+                'cr' -> conv + ReLU
+                'crg' -> conv + ReLU + groupnorm
+            num_groups (int): number of groups for the GroupNorm
+        """
+    def __init__(self, input_channels, output_channels, order="cgr", num_groups=8):
+        super(UpBlock, self).__init__()
+        self.input_channels = input_channels
+        self.output_channels = output_channels
+        self.order = order
+        self.num_groups = num_groups
+        self.conv1 = conv3d(input_channels, output_channels, kernel_size=1, bias=True, padding=0)
+        # self.convblock1 = SingleConv(output_channels + c, output_channels, order=order, num_groups=num_groups)
+        # self.convblock2 = SingleConv(output_channels, output_channels, order=order, num_groups=num_groups)
 
+    def forward(self, x):
+        _, c, w, h, d = x.size()
+        upsample1 = F.upsample(x, [2*w, 2*h, 2*d], mode='trilinear')
+        upsample = self.conv1(upsample1)
+        # concat = torch.cat([upsample, self.shortcut], 1)
+        # conv1 = self.convblock1(concat)
+        # conv2 = self.convblock2(conv1)
+        return upsample

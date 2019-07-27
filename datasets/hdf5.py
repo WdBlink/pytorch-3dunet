@@ -157,7 +157,7 @@ class BraTSDataset(Dataset):
 
     @staticmethod
     def make_crop(input):
-        image = input[..., 40:200, 24:216, 13:141]
+        image = input[..., 40:200, 40:200, 40:152]
         return image
 
 

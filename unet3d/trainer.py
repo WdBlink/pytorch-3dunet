@@ -6,6 +6,7 @@ import torch
 import datetime
 from tensorboardX import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+import matplotlib.pyplot as plt
 
 from . import utils
 
@@ -167,6 +168,15 @@ class UNet3DTrainer:
             input, target, weight = self._split_training_batch(t)
 
             output, loss = self._forward_pass(input, target, weight)
+
+
+            # output_sample = output[0, 1, :, :, 80].cpu().detach().numpy()
+            # fig = plt.figure()
+            # feature_image = fig.add_subplot(1, 1, 1)
+            # plt.imshow(output_sample, cmap="gray")
+            # feature_image.set_title('output')
+            # plt.savefig('picture/{}.png'.format(str(i)))
+            # plt.close()
 
             train_losses.update(loss.item(), self._batch_size(input))
 

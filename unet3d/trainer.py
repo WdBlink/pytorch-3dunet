@@ -11,6 +11,7 @@ from preprocess.partitioning import get_all_partition_ids
 from numpy import random
 import BraTS
 
+
 from . import utils
 
 class UNet3DTrainer:
@@ -157,7 +158,7 @@ class UNet3DTrainer:
         plt.savefig('picture/{}.png'.format(random.randint(1, 1000)))
         plt.close()
 
-    def train(self, train_loader, is_choose_randomly=True):
+    def train(self, train_loader, is_choose_randomly=False):
         """Trains the model for 1 epoch.
 
         Args:
@@ -199,7 +200,7 @@ class UNet3DTrainer:
                 labels = patient.seg
 
                 self.logger.info(
-                    f'Patient ID: {train_id_list[idx]}. Training iteration {self.num_iterations}. Batch {i}. Epoch [{self.num_epoch}/{self.max_num_epochs - 1}]')
+                    f'Patient ID {train_id_list[idx]}. Training iteration {self.num_iterations}. Batch {i}. Epoch [{self.num_epoch}/{self.max_num_epochs - 1}]')
 
                 input = _make_crop(images)
                 input_max = np.max(input)

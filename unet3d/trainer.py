@@ -7,9 +7,11 @@ import datetime
 from tensorboardX import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import matplotlib.pyplot as plt
+from preprocess.partitioning import get_all_partition_ids
+from numpy import random
+import BraTS
 
 from . import utils
-
 
 class UNet3DTrainer:
     """3D UNet trainer.
@@ -44,7 +46,7 @@ class UNet3DTrainer:
                  max_num_epochs=100, max_num_iterations=1e5,
                  validate_after_iters=100, log_after_iters=100,
                  validate_iters=None, num_iterations=1, num_epoch=0,
-                 eval_score_higher_is_better=True, best_eval_score=None,
+                 eval_score_higher_is_better=True,best_eval_score=None,
                  logger=None):
         if logger is None:
             self.logger = utils.get_logger('UNet3DTrainer', level=logging.DEBUG)
@@ -108,7 +110,7 @@ class UNet3DTrainer:
                    validate_after_iters=state['validate_after_iters'],
                    log_after_iters=state['log_after_iters'],
                    validate_iters=state['validate_iters'],
-                   model_name="UNet3d",
+                   model_name="UNet_Nested",
                    logger=logger)
 
     @classmethod
@@ -146,7 +148,16 @@ class UNet3DTrainer:
 
             self.num_epoch += 1
 
-    def train(self, train_loader):
+    def draw_picture(self, sample):
+
+        fig = plt.figure()
+        feature_image = fig.add_subplot(1, 1, 1)
+        plt.imshow(sample, cmap="gray")
+        feature_image.set_title('output')
+        plt.savefig('picture/{}.png'.format(random.randint(1, 1000)))
+        plt.close()
+
+    def train(self, train_loader, is_choose_randomly=True):
         """Trains the model for 1 epoch.
 
         Args:
@@ -155,79 +166,178 @@ class UNet3DTrainer:
         Returns:
             True if the training should be terminated immediately, False otherwise
         """
+        def _make_crop(input):
+            image = input[..., 40:200, 40:200, 40:152]
+            return image
+
+        def _make_one_hot(input):
+            seg = np.eye(5)[input].transpose(3, 0, 1, 2)
+            seg = seg[[0, 1, 2, 4], :, :, :]
+            return seg
+
         train_losses = utils.RunningAverage()
         train_eval_scores_multi = utils.RunningAverageMulti()
 
         # sets the model in training mode
         self.model.train()
 
-        for i, t in enumerate(train_loader):
-            self.logger.info(
-                f'Training iteration {self.num_iterations}. Batch {i}. Epoch [{self.num_epoch}/{self.max_num_epochs - 1}]')
+        if is_choose_randomly:
 
-            input, target, weight = self._split_training_batch(t)
+            train_ids, test_ids, validation_ids = get_all_partition_ids()
+            train_id_list = []
+            for train_id in train_ids:
+                train_id_list.append(train_id)
 
-            output, loss = self._forward_pass(input, target, weight)
+            brats = BraTS.DataSet(brats_root='/home/liujing/data/MICCAI_BraTS', year=2019)
 
+            for i in range(0, len(train_id_list)):
 
-            # output_sample = output[0, 1, :, :, 80].cpu().detach().numpy()
-            # fig = plt.figure()
-            # feature_image = fig.add_subplot(1, 1, 1)
-            # plt.imshow(output_sample, cmap="gray")
-            # feature_image.set_title('output')
-            # plt.savefig('picture/{}.png'.format(str(i)))
-            # plt.close()
+                idx = random.randint(0, len(train_id_list))
+                patient = brats.train.patient(train_id_list[idx])
+                images = patient.mri
+                # images = np.expand_dims(images, axis=0)
+                labels = patient.seg
 
-            train_losses.update(loss.item(), self._batch_size(input))
-
-            # compute gradients and update parameters
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-
-            if self.num_iterations % self.validate_after_iters == 0:
-                # evaluate on validation set
-                eval_score = self.validate(self.loaders['val'])
-                # adjust learning rate if necessary
-                if isinstance(self.scheduler, ReduceLROnPlateau):
-                    self.scheduler.step(eval_score)
-                else:
-                    self.scheduler.step()
-                # log current learning rate in tensorboard
-                self._log_lr()
-                # remember best validation metric
-                is_best = self._is_best_eval_score(eval_score)
-
-                # save checkpoint
-                self._save_checkpoint(is_best)
-
-            if self.num_iterations % self.log_after_iters == 0:
-                # if model contains final_activation layer for normalizing logits apply it, otherwise both
-                # the evaluation metric as well as images in tensorboard will be incorrectly computed
-                if hasattr(self.model, 'final_activation'):
-                    output = self.model.final_activation(output)
-
-                # compute eval criterion
-                eval_score = self.eval_criterion(output, target)
-                # train_eval_scores.update(eval_score.item(), self._batch_size(input))
-                train_eval_scores_multi.update(eval_score, self._batch_size(input))
-
-                # log stats, params and images
                 self.logger.info(
-                    f'Training stats. Loss: {train_losses.avg}. '
-                    f'Evaluation score WT:{train_eval_scores_multi.avg1}, '
-                    f'TC:{train_eval_scores_multi.avg2}, '
-                    f'ET:{train_eval_scores_multi.avg3}')
-                self._log_stats_multi('train', train_losses.avg, train_eval_scores_multi.avg1, train_eval_scores_multi.avg2, train_eval_scores_multi.avg3)
-                self._log_params()
-                self._log_images(input, target, output)
+                    f'Patient ID: {train_id_list[idx]}. Training iteration {self.num_iterations}. Batch {i}. Epoch [{self.num_epoch}/{self.max_num_epochs - 1}]')
 
-            if self.max_num_iterations < self.num_iterations:
+                input = _make_crop(images)
+                input_max = np.max(input)
+                import augment.transforms as transforms
+                transforms = transforms.Compose(
+                    [transforms.ToTensor(expand_dims=True),
+                     transforms.RangeNormalize(max_value=input_max),
+                     transforms.Normalize(std=0.5, mean=0.5)])
+                input = transforms(input).unsqueeze(0)
+                input = input.to(self.device)
+
+                target = _make_crop(labels)
+                target = _make_one_hot(target)
+                target = torch.from_numpy(target).unsqueeze(0)
+                target = target.to(self.device)
+
+                output, loss = self._forward_pass(input, target)
+
+                train_losses.update(loss.item())
+
+                # compute gradients and update parameters
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                if self.num_iterations % self.validate_after_iters == 0:
+                    # evaluate on validation set
+                    eval_score = self.validate(self.loaders['val'])
+                    # adjust learning rate if necessary
+                    if isinstance(self.scheduler, ReduceLROnPlateau):
+                        # self.scheduler.step(eval_score)
+                        pass
+                    else:
+                        # self.scheduler.step()
+                        pass
+                    # log current learning rate in tensorboard
+                    self._log_lr()
+                    # remember best validation metric
+                    is_best = self._is_best_eval_score(eval_score)
+
+                    # save checkpoint
+                    self._save_checkpoint(is_best)
+
+                if self.num_iterations % self.log_after_iters == 0:
+                    # if model contains final_activation layer for normalizing logits apply it, otherwise both
+                    # the evaluation metric as well as images in tensorboard will be incorrectly computed
+                    if hasattr(self.model, 'final_activation'):
+                        output = self.model.final_activation(output)
+
+                    # compute eval criterion
+                    eval_score = self.eval_criterion(output, target)
+                    # train_eval_scores.update(eval_score.item(), self._batch_size(input))
+                    train_eval_scores_multi.update(eval_score, self._batch_size(input))
+
+                    # log stats, params and images
+                    self.logger.info(
+                        f'Training stats. Loss: {train_losses.avg}. '
+                        f'Evaluation score WT:{train_eval_scores_multi.avg1}, '
+                        f'TC:{train_eval_scores_multi.avg2}, '
+                        f'ET:{train_eval_scores_multi.avg3}')
+                    self._log_stats_multi('train', train_losses.avg, train_eval_scores_multi.avg1,
+                                          train_eval_scores_multi.avg2, train_eval_scores_multi.avg3)
+                    self._log_params()
+                    self._log_images(input, target, output)
+
+                if self.max_num_iterations < self.num_iterations:
+                    self.logger.info(
+                        f'Maximum number of iterations {self.max_num_iterations} exceeded. Finishing training...')
+                    return True
+
+                self.num_iterations += 1
+        else:
+
+            for i, t in enumerate(train_loader):
+
                 self.logger.info(
-                    f'Maximum number of iterations {self.max_num_iterations} exceeded. Finishing training...')
-                return True
+                    f'Training iteration {self.num_iterations}. Batch {i}. Epoch [{self.num_epoch}/{self.max_num_epochs - 1}]')
 
-            self.num_iterations += 1
+                input, target, weight = self._split_training_batch(t)
+
+                output, loss = self._forward_pass(input, target, weight)
+
+                # output_sample = output[0, 1, :, :, 80].cpu().detach().numpy()
+                # self.draw_picture(output_sample)
+
+                train_losses.update(loss.item(), self._batch_size(input))
+
+                # compute gradients and update parameters
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                if self.num_iterations % self.validate_after_iters == 0:
+                    # evaluate on validation set
+                    eval_score = self.validate(self.loaders['val'])
+                    # adjust learning rate if necessary
+                    if isinstance(self.scheduler, ReduceLROnPlateau):
+                        # self.scheduler.step(eval_score)
+                        pass
+                    else:
+                        # self.scheduler.step()
+                        pass
+                    # log current learning rate in tensorboard
+                    self._log_lr()
+                    # remember best validation metric
+                    is_best = self._is_best_eval_score(eval_score)
+
+                    # save checkpoint
+                    self._save_checkpoint(is_best)
+
+                if self.num_iterations % self.log_after_iters == 0:
+                    # if model contains final_activation layer for normalizing logits apply it, otherwise both
+                    # the evaluation metric as well as images in tensorboard will be incorrectly computed
+                    if hasattr(self.model, 'final_activation'):
+                        output = self.model.final_activation(output)
+
+                    # compute eval criterion
+                    eval_score = self.eval_criterion(output, target)
+                    # train_eval_scores.update(eval_score.item(), self._batch_size(input))
+                    train_eval_scores_multi.update(eval_score, self._batch_size(input))
+
+                    # log stats, params and images
+                    self.logger.info(
+                        f'Training stats. Loss: {train_losses.avg}. '
+                        f'Evaluation score WT:{train_eval_scores_multi.avg1}, '
+                        f'TC:{train_eval_scores_multi.avg2}, '
+                        f'ET:{train_eval_scores_multi.avg3}')
+                    self._log_stats_multi('train', train_losses.avg, train_eval_scores_multi.avg1,
+                                          train_eval_scores_multi.avg2, train_eval_scores_multi.avg3)
+                    self._log_params()
+                    self._log_images(input, target, output)
+
+                if self.max_num_iterations < self.num_iterations:
+                    self.logger.info(
+                        f'Maximum number of iterations {self.max_num_iterations} exceeded. Finishing training...')
+                    return True
+
+                self.num_iterations += 1
 
         return False
 
@@ -271,6 +381,8 @@ class UNet3DTrainer:
         finally:
             # set back in training mode
             self.model.train()
+
+
 
     def _split_training_batch(self, t):
         def _move_to_device(input):

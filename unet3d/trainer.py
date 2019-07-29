@@ -168,7 +168,8 @@ class UNet3DTrainer:
             True if the training should be terminated immediately, False otherwise
         """
         def _make_crop(input):
-            image = input[..., 40:200, 40:200, 40:152]
+            # image = input[..., 40:200, 40:200, 40:152]
+            image = input[..., 40:200, 24:216, 13:141]
             return image
 
         def _make_one_hot(input):

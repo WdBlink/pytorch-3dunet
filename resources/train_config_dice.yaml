@@ -3,7 +3,7 @@ manual_seed: 0
 # model configuration
 model:
   # model class
-  name: VaeUNet
+  name: UNet_Nested
   # number of input channels to the model
   in_channels: 4
   # number of output channels
@@ -19,7 +19,7 @@ model:
 # trainer configuration
 trainer:
   # path to the checkpoint directory
-  checkpoint_dir: /home/server/github/pytorch-3dunet/checkpoints/vae_model
+  checkpoint_dir: /home/liujing/pytorch-3dunet/checkpoints/
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: null
   # how many iterations between validations
@@ -34,14 +34,16 @@ trainer:
   eval_score_higher_is_better: True
 # optimizer configuration
 optimizer:
+  # optimizer mode
+  mode: SWA
   # initial learning rate
   learning_rate: 0.0001
   # weight decay
-  weight_decay: 0.0001
+  weight_decay: 0.002
 # loss function configuration
 loss:
   # loss function to be used during training
-  name: VaeLoss
+  name: DiceLoss
   # A manual rescaling weight given to each class.
   loss_weight: null
   # a target value that is ignored and does not contribute to the input gradient
@@ -52,9 +54,9 @@ eval_metric:
   # a target label that is ignored during metric evaluation
   ignore_index: null
 lr_scheduler:
-  name: MultiStepLR
-  milestones: [10, 30, 60]
-  gamma: 0.2
+  name: ExponentialLR
+#  milestones: [10, 30, 60]
+  gamma: 0.9
 # data loaders configuration
 loaders:
   # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
@@ -76,7 +78,7 @@ loaders:
   val_path:
     - 'resources/random_label3D.h5'
   dataset_path:
-    - '/home/server/data'
+    - '/home/liujing/data/MICCAI_BraTS'
   # how many subprocesses to use for data loading
   num_workers: 8
   # data transformations/augmentations

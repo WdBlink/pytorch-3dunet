@@ -3,6 +3,7 @@ import importlib
 import torch
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+import torchcontrib
 
 import BraTS
 from datasets.hdf5 import get_train_loaders, get_brats_train_loaders
@@ -49,16 +50,22 @@ def _create_trainer(config, model, optimizer, lr_scheduler, loss_criterion, eval
                              eval_score_higher_is_better=trainer_config['eval_score_higher_is_better'],
                              model_name=config['model']['name'],
                              validate_iters=10,
-                             logger=logger)
+                             logger=logger,
+                             optimizer_mode=config['optimizer']['mode'])
 
 
 def _create_optimizer(config, model):
     assert 'optimizer' in config, 'Cannot find optimizer configuration'
     optimizer_config = config['optimizer']
-    learning_rate = optimizer_config['learning_rate']
-    weight_decay = optimizer_config['weight_decay']
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-
+    if optimizer_config['mode'] == 'Adam':
+        learning_rate = optimizer_config['learning_rate']
+        weight_decay = optimizer_config['weight_decay']
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    elif optimizer_config['mode'] == 'SWA':
+        learning_rate = optimizer_config['learning_rate']
+        weight_decay = optimizer_config['weight_decay']
+        base_opt = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay, momentum=0.9)
+        optimizer = torchcontrib.optim.SWA(base_opt, swa_start=10, swa_freq=5, swa_lr=0.05)
     return optimizer
 
 
